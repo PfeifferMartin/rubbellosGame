@@ -255,32 +255,27 @@
           const bctx = brush.getContext('2d');
 
           bctx.clearRect(0, 0, sizeDev, sizeDev);
-          const center = sizeDev / 2;
-          const maxR = center;
 
-          // Weiche Basisform
-          const radial = bctx.createRadialGradient(center, center, 0, center, center, maxR);
-          radial.addColorStop(0, 'rgba(0,0,0,1)');
-          radial.addColorStop(0.6, 'rgba(0,0,0,0.6)');
-          radial.addColorStop(1, 'rgba(0,0,0,0)');
-          bctx.fillStyle = radial;
-          bctx.beginPath();
-          bctx.arc(center, center, maxR, 0, Math.PI * 2);
-          bctx.fill();
+          // Elongated, sharp coin edge (thin rectangle) in the center
+          const lengthDev = Math.floor(sizeDev * 0.9);
+          const thicknessCss = Math.max(1.8, radiusCss * 0.22);
+          const thicknessDev = Math.max(1, Math.floor(thicknessCss * dpr));
+          const x = Math.floor((sizeDev - lengthDev) / 2);
+          const y = Math.floor((sizeDev - thicknessDev) / 2);
 
-          // Körnige Kante
-          bctx.globalCompositeOperation = 'source-over';
-          const dots = Math.floor(800 * (radiusCss / 16));
-          for (let i = 0; i < dots; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const r = Math.random() * maxR;
-            const x = center + Math.cos(angle) * r;
-            const y = center + Math.sin(angle) * r;
-            const alpha = r > maxR * 0.7 ? Math.random() * 0.8 : Math.random() * 0.4;
-            bctx.fillStyle = `rgba(0,0,0,${alpha})`;
-            const s = 1 + Math.random() * 2 * dpr;
-            bctx.fillRect(x, y, s, s);
+          bctx.fillStyle = 'rgba(0,0,0,1)';
+          bctx.fillRect(x, y, lengthDev, thicknessDev);
+
+          // Subtle irregularity along the edge to avoid perfectly straight cuts
+          const segments = Math.max(6, Math.floor(lengthDev / 8));
+          bctx.globalAlpha = 0.45;
+          for (let i = 0; i < segments; i++) {
+            const segW = Math.floor(lengthDev / segments);
+            const segX = x + i * segW;
+            const jitter = Math.floor((Math.random() - 0.5) * Math.max(1, thicknessDev * 0.3));
+            bctx.fillRect(segX, y + jitter, segW, Math.max(1, thicknessDev - 1));
           }
+          bctx.globalAlpha = 1;
 
           return brush;
         }
@@ -290,23 +285,22 @@
           return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
         }
 
-        function stampBrush(x, y) {
+        function stampBrush(x, y, angle) {
           const sizeCss = brushRadiusCssPx * 2;
-          // Jitter und Rotation
-          const jitter = Math.random() * (brushRadiusCssPx * 0.25);
-          const jx = (Math.random() - 0.5) * 2 * jitter;
-          const jy = (Math.random() - 0.5) * 2 * jitter;
-          const scale = 0.9 + Math.random() * 0.3;
-          const drawSize = sizeCss * scale;
-          const dx = x - (drawSize / 2) + jx;
-          const dy = y - (drawSize / 2) + jy;
+          // Slight scale and positional jitter to keep it organic
+          const scale = 0.9 + Math.random() * 0.25;
+          const drawW = sizeCss * scale;
+          const drawH = sizeCss * scale;
+          const jitterPos = (Math.random() - 0.5) * 1.5;
+          const jitterAngle = (typeof angle === 'number' ? angle : 0) + (Math.random() - 0.5) * 0.12;
 
           foilCtx.save();
           foilCtx.globalCompositeOperation = 'destination-out';
-          foilCtx.translate(x + jx, y + jy);
-          foilCtx.rotate((Math.random() - 0.5) * 0.6);
-          foilCtx.translate(-(x + jx), -(y + jy));
-          foilCtx.drawImage(brushCanvas, dx, dy, drawSize, drawSize);
+          foilCtx.imageSmoothingEnabled = false;
+          foilCtx.translate(x, y);
+          foilCtx.rotate(jitterAngle);
+          foilCtx.translate(0, jitterPos);
+          foilCtx.drawImage(brushCanvas, -drawW / 2, -drawH / 2, drawW, drawH);
           foilCtx.restore();
         }
 
@@ -381,7 +375,7 @@
           foilCanvas.setPointerCapture(evt.pointerId);
           const p = getCanvasPoint(evt);
           lastPoint = p;
-          for (let i = 0; i < 3; i++) stampBrush(p.x, p.y);
+          for (let i = 0; i < 3; i++) stampBrush(p.x, p.y, 0);
           spawnParticles(p.x, p.y);
         }
 
@@ -394,13 +388,14 @@
           const dist = Math.hypot(dx, dy);
           const step = Math.max(2, brushRadiusCssPx * 0.4);
           const steps = Math.ceil(dist / step);
+          const angle = Math.atan2(dy, dx);
           for (let i = 1; i <= steps; i++) {
             const t = i / steps;
             const x = lp.x + dx * t;
             const y = lp.y + dy * t;
-            stampBrush(x, y);
-            if (Math.random() < 0.6) stampBrush(x + (Math.random()-0.5)*2, y + (Math.random()-0.5)*2);
-            if (Math.random() < 0.3) stampBrush(x + (Math.random()-0.5)*4, y + (Math.random()-0.5)*4);
+            stampBrush(x, y, angle);
+            if (Math.random() < 0.6) stampBrush(x + (Math.random()-0.5)*2, y + (Math.random()-0.5)*2, angle + (Math.random()-0.5)*0.15);
+            if (Math.random() < 0.3) stampBrush(x + (Math.random()-0.5)*4, y + (Math.random()-0.5)*4, angle + (Math.random()-0.5)*0.25);
             if (Math.random() < 0.4) spawnParticles(x, y);
             if (Math.random() < 0.5) drawMicroScratches(x, y, dx, dy);
           }
