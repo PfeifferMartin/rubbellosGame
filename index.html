@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rubbellos – Überraschung</title>
+    <style>
+      :root {
+        --bg-start: #fff7e6;
+        --bg-end: #ffe3f3;
+        --accent: #ff7ab6;
+        --accent-2: #7ad1ff;
+        --card-bg: #ffffff;
+        --text: #1b1b1f;
+        --subtle: #6b7280;
+        --success: #17b890;
+        --shadow: 0 10px 30px rgba(0,0,0,0.10), 0 6px 10px rgba(0,0,0,0.05);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: var(--text);
+        background: radial-gradient(1200px 800px at 10% 10%, var(--bg-end), transparent 60%),
+                    radial-gradient(1000px 700px at 90% 20%, #e6fffa, transparent 60%),
+                    linear-gradient(135deg, var(--bg-start), #fff);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .card {
+        width: 100%;
+        max-width: 760px;
+        background: var(--card-bg);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        padding: clamp(18px, 3vw, 28px);
+      }
+
+      h1 {
+        margin: 10px 0 0 0;
+        font-size: clamp(22px, 3.4vw, 34px);
+        line-height: 1.2;
+        text-align: center;
+      }
+
+      .subtitle {
+        margin: 10px 0 16px 0;
+        color: var(--subtle);
+        font-size: clamp(14px, 2.2vw, 16px);
+        text-align: center;
+      }
+
+      .scratch-card {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 5 / 3;
+        max-height: 60vh;
+        border-radius: 16px;
+        overflow: hidden;
+        user-select: none;
+      }
+
+      .hidden-message {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        text-align: center;
+        background: repeating-linear-gradient(45deg, rgba(255, 122, 182, 0.06) 0, rgba(255, 122, 182, 0.06) 12px, rgba(122, 209, 255, 0.06) 12px, rgba(122, 209, 255, 0.06) 24px),
+                    radial-gradient(1200px 800px at 10% 10%, #fff8, transparent 60%),
+                    #fff;
+      }
+
+      .hidden-message h2 {
+        margin: 0;
+        font-size: clamp(20px, 3vw, 28px);
+      }
+
+      canvas#scratchCanvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none; /* Prevent touch scrolling while scratching */
+      }
+
+      .hint {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card" aria-labelledby="title">
+      <h1 id="title">Rubbellos</h1>
+      <p class="subtitle">Viel spaß!</p>
+
+      <section class="scratch-card" aria-label="Rubbel-Überraschung">
+        <div class="hidden-message">
+          <div>
+            <h2 id="messageText">🎁 Eine kleine Überraschung für dich!</h2>
+          </div>
+        </div>
+        <canvas id="scratchCanvas"></canvas>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        const messages = [
+          `Ein Leben lang Gas gegeben – jetzt beginnt dein nächstes Kapitel. Alles Gute dafür.`,
+          `Danke für deine Unterstützung, Papa. Genieße die freie Zeit, du hast sie dir verdient.`,
+          `Das nächste Projekt: Entspannung! Nach all den Jahren harter Arbeit ist es jetzt Zeit dafür.`,
+          `Du hast immer gezeigt, wie's geht. Jetzt ist es an der Zeit, den Ruhestand zu genießen.`,
+          `Genug gearbeitet! Jetzt beginnt der verdiente nächste Abschnitt. Auf dich, Papa!`,
+          `Endlich Zeit für deine eigenen Projekte. Viel Erfolg und Spaß dabei.`,
+          `Ein Leben lang im Einsatz. Jetzt ist deine Zeit gekommen. Alles Gute für den Ruhestand.`,
+          `Deine Arbeit spricht für sich. Möge dein Ruhestand jetzt voller guter Erlebnisse sein.`,
+          `Kein Wecker, keine Termine. Nur noch dein Takt. Das hast du dir nach all den Jahren erarbeitet.`,
+          `Ein wichtiger Lebensabschnitt ist geschafft. Jetzt beginnt ein neues, eigenes Abenteuer.`
+        ];
+
+        const params = new URLSearchParams(window.location.search);
+        const msgParam = params.get('msg');
+        let index = 0;
+        if (msgParam) {
+          if (String(msgParam).toLowerCase() === 'random') {
+            index = Math.floor(Math.random() * messages.length);
+          } else {
+            const n = parseInt(String(msgParam), 10);
+            if (!Number.isNaN(n) && n >= 1 && n <= messages.length) {
+              index = n - 1; // 1-based to 0-based
+            }
+          }
+        }
+
+        const el = document.getElementById('messageText');
+        if (el) el.textContent = messages[index];
+      })();
+
+      (function () {
+        const canvas = document.getElementById('scratchCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: false });
+
+        let isScratching = false;
+        let deviceScale = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+        let brushRadiusCssPx = 12; // Noch kleinere Pinselgröße: schwerer freizulegen
+
+        function setCanvasSizeToCssBox() {
+          const rect = canvas.getBoundingClientRect();
+          deviceScale = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+          canvas.width = Math.max(1, Math.floor(rect.width * deviceScale));
+          canvas.height = Math.max(1, Math.floor(rect.height * deviceScale));
+          ctx.scale(deviceScale, deviceScale);
+        }
+
+        function paintOverlay() {
+          const rect = canvas.getBoundingClientRect();
+          // Metallic-ish gradient overlay
+          const grad = ctx.createLinearGradient(0, 0, rect.width, rect.height);
+          grad.addColorStop(0, '#c0c0c0');
+          grad.addColorStop(0.5, '#dcdcdc');
+          grad.addColorStop(1, '#b0b0b0');
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, rect.width, rect.height);
+
+          // Optional subtle label
+          ctx.fillStyle = 'rgba(0,0,0,0.25)';
+          ctx.font = 'bold 16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('Hier rubbeln ✨', rect.width / 2, rect.height / 2);
+        }
+
+        function getCanvasCoordinates(evt) {
+          const rect = canvas.getBoundingClientRect();
+          const x = (evt.clientX - rect.left);
+          const y = (evt.clientY - rect.top);
+          return { x, y };
+        }
+
+        function scratchAtPointer(evt) {
+          const { x, y } = getCanvasCoordinates(evt);
+          const radius = brushRadiusCssPx;
+
+          ctx.save();
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        function startScratch(evt) {
+          isScratching = true;
+          canvas.setPointerCapture(evt.pointerId);
+          scratchAtPointer(evt);
+        }
+
+        function moveScratch(evt) {
+          if (!isScratching) return;
+          scratchAtPointer(evt);
+        }
+
+        function endScratch(evt) {
+          isScratching = false;
+          try { canvas.releasePointerCapture(evt.pointerId); } catch (_) {}
+        }
+
+        function resetOverlay() {
+          // Reset transform (scale) before repaint to avoid compounded scaling
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          setCanvasSizeToCssBox();
+          paintOverlay();
+        }
+
+        // Initialize
+        resetOverlay();
+
+        // Events
+        canvas.addEventListener('pointerdown', startScratch);
+        canvas.addEventListener('pointermove', moveScratch);
+        canvas.addEventListener('pointerup', endScratch);
+        canvas.addEventListener('pointerleave', endScratch);
+        canvas.addEventListener('pointercancel', endScratch);
+
+        window.addEventListener('resize', () => {
+          // Preserve experience on resize by repainting overlay
+          resetOverlay();
+        });
+      })();
+    </script>
+  </body>
+</html> 
