@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rubbellos</title>
+    <style>
+      :root {
+        --bg-start: #fff7e6;
+        --bg-end: #ffe3f3;
+        --card-bg: #ffffff;
+        --text: #1b1b1f;
+        --subtle: #6b7280;
+        --shadow: 0 10px 30px rgba(0,0,0,0.10), 0 6px 10px rgba(0,0,0,0.05);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: var(--text);
+        background: radial-gradient(1200px 800px at 10% 10%, var(--bg-end), transparent 60%),
+                    radial-gradient(1000px 700px at 90% 20%, #e6fffa, transparent 60%),
+                    linear-gradient(135deg, var(--bg-start), #fff);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .card {
+        width: 100%;
+        max-width: 760px;
+        background: var(--card-bg);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        padding: clamp(18px, 3vw, 28px);
+      }
+
+      h1 {
+        margin: 10px 0 0 0;
+        font-size: clamp(22px, 3.4vw, 34px);
+        line-height: 1.2;
+        text-align: center;
+      }
+
+      .subtitle {
+        margin: 10px 0 16px 0;
+        color: var(--subtle);
+        font-size: clamp(14px, 2.2vw, 16px);
+        text-align: center;
+      }
+
+      .scratch-card {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 5 / 3;
+        max-height: 60vh;
+        border-radius: 16px;
+        overflow: hidden;
+        user-select: none;
+        background: #fff;
+      }
+
+      .hidden-message {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        text-align: center;
+        background: repeating-linear-gradient(45deg, rgba(255, 122, 182, 0.06) 0, rgba(255, 122, 182, 0.06) 12px, rgba(122, 209, 255, 0.06) 12px, rgba(122, 209, 255, 0.06) 24px),
+                    radial-gradient(1200px 800px at 10% 10%, #fff8, transparent 60%),
+                    #fff;
+      }
+
+      .hidden-message h2 {
+        margin: 0;
+        font-size: clamp(20px, 3vw, 28px);
+      }
+
+      canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      #foilCanvas { touch-action: none; }
+      #effectsCanvas { pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <main class="card" aria-labelledby="title">
+      <h1 id="title">Rubbellos</h1>
+      <p class="subtitle">Viel spaß!</p>
+
+      <section class="scratch-card" aria-label="Rubbel-Überraschung">
+        <div class="hidden-message">
+          <div>
+            <h2 id="messageText">🎁 Eine kleine Überraschung für dich!</h2>
+          </div>
+        </div>
+        <canvas id="foilCanvas"></canvas>
+        <canvas id="effectsCanvas"></canvas>
+      </section>
+    </main>
+
+    <script>
+      // Nachrichtenauswahl über ?msg=1..10 oder ?msg=random
+      (function selectMessage() {
+        const messages = [
+          `Ein Leben lang Gas gegeben – jetzt beginnt dein nächstes Kapitel. Alles Gute dafür.`,
+          `Danke für deine Unterstützung, Papa. Genieße die freie Zeit, du hast sie dir verdient.`,
+          `Das nächste Projekt: Entspannung! Nach all den Jahren harter Arbeit ist es jetzt Zeit dafür.`,
+          `Du hast immer gezeigt, wie's geht. Jetzt ist es an der Zeit, den Ruhestand zu genießen.`,
+          `Genug gearbeitet! Jetzt beginnt der verdiente nächste Abschnitt. Auf dich, Papa!`,
+          `Endlich Zeit für deine eigenen Projekte. Viel Erfolg und Spaß dabei.`,
+          `Ein Leben lang im Einsatz. Jetzt ist deine Zeit gekommen. Alles Gute für den Ruhestand.`,
+          `Deine Arbeit spricht für sich. Möge dein Ruhestand jetzt voller guter Erlebnisse sein.`,
+          `Kein Wecker, keine Termine. Nur noch dein Takt. Das hast du dir nach all den Jahren erarbeitet.`,
+          `Ein wichtiger Lebensabschnitt ist geschafft. Jetzt beginnt ein neues, eigenes Abenteuer.`
+        ];
+        const params = new URLSearchParams(window.location.search);
+        const msgParam = params.get('msg');
+        let index = 0;
+        if (msgParam) {
+          if (String(msgParam).toLowerCase() === 'random') {
+            index = Math.floor(Math.random() * messages.length);
+          } else {
+            const n = parseInt(String(msgParam), 10);
+            if (!Number.isNaN(n) && n >= 1 && n <= messages.length) index = n - 1;
+          }
+        }
+        const el = document.getElementById('messageText');
+        if (el) el.textContent = messages[index];
+      })();
+
+      (function scratchCard() {
+        const foilCanvas = document.getElementById('foilCanvas');
+        const foilCtx = foilCanvas.getContext('2d');
+        const effectsCanvas = document.getElementById('effectsCanvas');
+        const effectsCtx = effectsCanvas.getContext('2d');
+
+        let deviceScale = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+        let isScratching = false;
+        let lastPoint = null;
+        let brushRadiusCssPx = 12; // kleine, präzise Spitze
+        let brushCanvas = null; // Offscreen-Pinsel (Textur)
+        let foilPattern = null; // Offscreen-Pattern für Folie
+
+        // Partikel für Krümel/Späne
+        const particles = [];
+        const maxParticles = 400;
+
+        function resize() {
+          const rect = foilCanvas.getBoundingClientRect();
+          deviceScale = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+
+          // Foil canvas
+          foilCanvas.width = Math.max(1, Math.floor(rect.width * deviceScale));
+          foilCanvas.height = Math.max(1, Math.floor(rect.height * deviceScale));
+          foilCtx.setTransform(1, 0, 0, 1, 0, 0);
+          foilCtx.scale(deviceScale, deviceScale);
+
+          // Effects canvas
+          effectsCanvas.width = foilCanvas.width;
+          effectsCanvas.height = foilCanvas.height;
+          effectsCtx.setTransform(1, 0, 0, 1, 0, 0);
+          effectsCtx.scale(deviceScale, deviceScale);
+
+          foilPattern = createFoilPattern(rect.width, rect.height, deviceScale);
+          brushCanvas = createBrushTexture(brushRadiusCssPx, deviceScale);
+          paintFoilOverlay();
+          effectsCtx.clearRect(0, 0, rect.width, rect.height);
+        }
+
+        function paintFoilOverlay() {
+          const rect = foilCanvas.getBoundingClientRect();
+          const w = rect.width;
+          const h = rect.height;
+
+          // Metallischer Gradient
+          const grad = foilCtx.createLinearGradient(0, 0, w, h);
+          grad.addColorStop(0.00, '#bdbdbd');
+          grad.addColorStop(0.22, '#d8d8d8');
+          grad.addColorStop(0.50, '#c3c3c3');
+          grad.addColorStop(0.78, '#e0e0e0');
+          grad.addColorStop(1.00, '#b3b3b3');
+          foilCtx.globalCompositeOperation = 'source-over';
+          foilCtx.fillStyle = grad;
+          foilCtx.fillRect(0, 0, w, h);
+
+          // Diagonale Glanzlinien
+          foilCtx.globalAlpha = 0.12;
+          foilCtx.strokeStyle = 'rgba(255,255,255,0.6)';
+          foilCtx.lineWidth = 1;
+          const step = 14;
+          for (let x = -h; x < w + h; x += step) {
+            foilCtx.beginPath();
+            foilCtx.moveTo(x, 0);
+            foilCtx.lineTo(x - h, h);
+            foilCtx.stroke();
+          }
+          foilCtx.globalAlpha = 1;
+
+          // Rausch-/Sprenkel-Pattern
+          if (foilPattern) {
+            foilCtx.globalAlpha = 0.5;
+            foilCtx.fillStyle = foilPattern;
+            foilCtx.fillRect(0, 0, w, h);
+            foilCtx.globalAlpha = 1;
+          }
+
+          // Vignette
+          const vignette = foilCtx.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.1, w * 0.5, h * 0.5, Math.max(w, h) * 0.65);
+          vignette.addColorStop(0, 'rgba(0,0,0,0)');
+          vignette.addColorStop(1, 'rgba(0,0,0,0.22)');
+          foilCtx.fillStyle = vignette;
+          foilCtx.fillRect(0, 0, w, h);
+        }
+
+        function createFoilPattern(widthCss, heightCss, dpr) {
+          const tileSize = 128 * dpr;
+          const tile = document.createElement('canvas');
+          tile.width = tileSize;
+          tile.height = tileSize;
+          const tctx = tile.getContext('2d');
+
+          // Grundrauschen
+          const imageData = tctx.createImageData(tileSize, tileSize);
+          const data = imageData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const v = Math.floor(200 + Math.random() * 55);
+            data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = Math.floor(20 + Math.random() * 35);
+          }
+          tctx.putImageData(imageData, 0, 0);
+
+          // Helle Flecken
+          tctx.globalAlpha = 0.4;
+          tctx.fillStyle = '#ffffff';
+          for (let i = 0; i < 120; i++) {
+            const x = Math.random() * tileSize;
+            const y = Math.random() * tileSize;
+            const w = 1 + Math.random() * 2;
+            const h = 1 + Math.random() * 2;
+            tctx.fillRect(x, y, w, h);
+          }
+          tctx.globalAlpha = 1;
+
+          return tctx.createPattern(tile, 'repeat');
+        }
+
+        function createBrushTexture(radiusCss, dpr) {
+          const sizeCss = radiusCss * 2;
+          const sizeDev = Math.max(2, Math.floor(sizeCss * dpr));
+          const brush = document.createElement('canvas');
+          brush.width = sizeDev;
+          brush.height = sizeDev;
+          const bctx = brush.getContext('2d');
+
+          bctx.clearRect(0, 0, sizeDev, sizeDev);
+          const center = sizeDev / 2;
+          const maxR = center;
+
+          // Weiche Basisform
+          const radial = bctx.createRadialGradient(center, center, 0, center, center, maxR);
+          radial.addColorStop(0, 'rgba(0,0,0,1)');
+          radial.addColorStop(0.6, 'rgba(0,0,0,0.6)');
+          radial.addColorStop(1, 'rgba(0,0,0,0)');
+          bctx.fillStyle = radial;
+          bctx.beginPath();
+          bctx.arc(center, center, maxR, 0, Math.PI * 2);
+          bctx.fill();
+
+          // Körnige Kante
+          bctx.globalCompositeOperation = 'source-over';
+          const dots = Math.floor(800 * (radiusCss / 16));
+          for (let i = 0; i < dots; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = Math.random() * maxR;
+            const x = center + Math.cos(angle) * r;
+            const y = center + Math.sin(angle) * r;
+            const alpha = r > maxR * 0.7 ? Math.random() * 0.8 : Math.random() * 0.4;
+            bctx.fillStyle = `rgba(0,0,0,${alpha})`;
+            const s = 1 + Math.random() * 2 * dpr;
+            bctx.fillRect(x, y, s, s);
+          }
+
+          return brush;
+        }
+
+        function getCanvasPoint(evt) {
+          const rect = foilCanvas.getBoundingClientRect();
+          return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+        }
+
+        function stampBrush(x, y) {
+          const sizeCss = brushRadiusCssPx * 2;
+          // Jitter und Rotation
+          const jitter = Math.random() * (brushRadiusCssPx * 0.25);
+          const jx = (Math.random() - 0.5) * 2 * jitter;
+          const jy = (Math.random() - 0.5) * 2 * jitter;
+          const scale = 0.9 + Math.random() * 0.3;
+          const drawSize = sizeCss * scale;
+          const dx = x - (drawSize / 2) + jx;
+          const dy = y - (drawSize / 2) + jy;
+
+          foilCtx.save();
+          foilCtx.globalCompositeOperation = 'destination-out';
+          foilCtx.translate(x + jx, y + jy);
+          foilCtx.rotate((Math.random() - 0.5) * 0.6);
+          foilCtx.translate(-(x + jx), -(y + jy));
+          foilCtx.drawImage(brushCanvas, dx, dy, drawSize, drawSize);
+          foilCtx.restore();
+        }
+
+        function drawMicroScratches(x, y, dx, dy) {
+          // feine Kratzer-Glanzlinien
+          foilCtx.save();
+          foilCtx.globalCompositeOperation = 'lighter';
+          foilCtx.strokeStyle = 'rgba(255,255,255,0.15)';
+          foilCtx.lineWidth = 0.8;
+          const count = 3;
+          for (let i = 0; i < count; i++) {
+            const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 1.2;
+            const len = 6 + Math.random() * 10;
+            const ox = (Math.random() - 0.5) * 6;
+            const oy = (Math.random() - 0.5) * 6;
+            foilCtx.beginPath();
+            foilCtx.moveTo(x + ox, y + oy);
+            foilCtx.lineTo(x + ox + Math.cos(angle) * len, y + oy + Math.sin(angle) * len);
+            foilCtx.stroke();
+          }
+          foilCtx.restore();
+        }
+
+        function spawnParticles(x, y) {
+          const count = 4 + Math.floor(Math.random() * 4);
+          for (let i = 0; i < count; i++) {
+            if (particles.length >= maxParticles) { particles.shift(); }
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 30 + Math.random() * 60;
+            particles.push({
+              x, y,
+              vx: Math.cos(angle) * speed / 60,
+              vy: Math.sin(angle) * speed / 60 - 0.5,
+              r: 0.6 + Math.random() * 1.4,
+              life: 1,
+              spin: (Math.random() - 0.5) * 0.2,
+              rot: Math.random() * Math.PI * 2,
+              shade: 180 + Math.floor(Math.random() * 60)
+            });
+          }
+        }
+
+        function updateParticles() {
+          const rect = foilCanvas.getBoundingClientRect();
+          effectsCtx.clearRect(0, 0, rect.width, rect.height);
+          for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.vy += 0.15 / 60; // Gravitation
+            p.vx *= 0.99; // Luftwiderstand
+            p.vy *= 0.99;
+            p.x += p.vx * 60 / 60;
+            p.y += p.vy * 60 / 60;
+            p.rot += p.spin;
+            p.life -= 0.01;
+            if (p.life <= 0 || p.y > rect.height + 10) {
+              particles.splice(i, 1);
+              continue;
+            }
+            effectsCtx.save();
+            effectsCtx.translate(p.x, p.y);
+            effectsCtx.rotate(p.rot);
+            effectsCtx.fillStyle = `rgba(${p.shade},${p.shade},${p.shade},${Math.max(0, p.life)})`;
+            const w = p.r * 2.2, h = p.r * 1.4;
+            effectsCtx.fillRect(-w/2, -h/2, w, h);
+            effectsCtx.restore();
+          }
+          requestAnimationFrame(updateParticles);
+        }
+
+        function startScratch(evt) {
+          isScratching = true;
+          foilCanvas.setPointerCapture(evt.pointerId);
+          const p = getCanvasPoint(evt);
+          lastPoint = p;
+          for (let i = 0; i < 3; i++) stampBrush(p.x, p.y);
+          spawnParticles(p.x, p.y);
+        }
+
+        function moveScratch(evt) {
+          if (!isScratching) return;
+          const p = getCanvasPoint(evt);
+          const lp = lastPoint || p;
+          const dx = p.x - lp.x;
+          const dy = p.y - lp.y;
+          const dist = Math.hypot(dx, dy);
+          const step = Math.max(2, brushRadiusCssPx * 0.4);
+          const steps = Math.ceil(dist / step);
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            const x = lp.x + dx * t;
+            const y = lp.y + dy * t;
+            stampBrush(x, y);
+            if (Math.random() < 0.6) stampBrush(x + (Math.random()-0.5)*2, y + (Math.random()-0.5)*2);
+            if (Math.random() < 0.3) stampBrush(x + (Math.random()-0.5)*4, y + (Math.random()-0.5)*4);
+            if (Math.random() < 0.4) spawnParticles(x, y);
+            if (Math.random() < 0.5) drawMicroScratches(x, y, dx, dy);
+          }
+          lastPoint = p;
+        }
+
+        function endScratch(evt) {
+          isScratching = false;
+          lastPoint = null;
+          try { foilCanvas.releasePointerCapture(evt.pointerId); } catch (_) {}
+        }
+
+        // Init
+        resize();
+        updateParticles();
+
+        // Events
+        foilCanvas.addEventListener('pointerdown', startScratch);
+        foilCanvas.addEventListener('pointermove', moveScratch);
+        foilCanvas.addEventListener('pointerup', endScratch);
+        foilCanvas.addEventListener('pointerleave', endScratch);
+        foilCanvas.addEventListener('pointercancel', endScratch);
+        window.addEventListener('resize', resize);
+      })();
+    </script>
+  </body>
+</html> 
