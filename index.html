@@ -102,7 +102,7 @@
     </main>
 
     <script>
-      // Nachrichtenauswahl über ?msg=1..10 oder ?msg=random
+      // Nachrichtenauswahl über ?msg=1..20 oder ?msg=random
       (function selectMessage() {
         const messages = [
           `Ein Leben lang Gas gegeben – jetzt beginnt dein nächstes Kapitel. Alles Gute dafür.`,
@@ -114,7 +114,17 @@
           `Ein Leben lang im Einsatz. Jetzt ist deine Zeit gekommen. Alles Gute für den Ruhestand.`,
           `Deine Arbeit spricht für sich. Möge dein Ruhestand jetzt voller guter Erlebnisse sein.`,
           `Kein Wecker, keine Termine. Nur noch dein Takt. Das hast du dir nach all den Jahren erarbeitet.`,
-          `Ein wichtiger Lebensabschnitt ist geschafft. Jetzt beginnt ein neues, eigenes Abenteuer.`
+          `Ein wichtiger Lebensabschnitt ist geschafft. Jetzt beginnt ein neues, eigenes Abenteuer.`,
+          `Für euch beginnt ein neues Familienabenteuer. Wir freuen uns sehr für euch.`,
+          `Dein Baby hat sich eine tolle Mama ausgesucht.`,
+          `Auf viele schöne kleine Momente, die wir gemeinsam erleben.`,
+          `Du wirst das alles in deinem ganz eigenen Tempo gut hinbekommen.`,
+          `Schon jetzt steckt so viel Liebe in eurem kleinen Team.`,
+          `Unsere kunterbunte Freundesgruppe wächst, und wir können es kaum erwarten!`,
+          `Wenn du müde bist: Denk daran, du darfst dir jederzeit Hilfe holen und wir sind immer für dich da.`,
+          `Wir freuen uns schon darauf, euer kleines Menschlein kennenzulernen.`,
+          `Du musst nicht perfekt sein, nur liebevoll – und das bist du längst.`,
+          `Für dich, für euch und für euer Baby: alles Liebe und ganz viel Gelassenheit.`
         ];
         const params = new URLSearchParams(window.location.search);
         const msgParam = params.get('msg');
